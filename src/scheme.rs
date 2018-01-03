@@ -63,7 +63,7 @@ impl SchemeMut for LogScheme {
 
             if handle.buf.is_empty() {
                 let timestamp = Local::now();
-                let _ = write!(handle.buf, "{}", timestamp.format("%F %T.%f"));
+                let _ = write!(handle.buf, "{}", timestamp.format("%F %T%.f "));
                 handle.buf.extend_from_slice(&handle.context);
                 handle.buf.extend_from_slice(b": ");
             }
