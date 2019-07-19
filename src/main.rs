@@ -18,7 +18,9 @@ fn main() {
 
         loop {
             let mut packet = Packet::default();
-            socket.read(&mut packet).expect("logd: failed to read events from log scheme");
+            if socket.read(&mut packet).expect("logd: failed to read events from log scheme") == 0 {
+                break;
+            }
 
             scheme.handle(&mut packet);
 
