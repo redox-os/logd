@@ -5,7 +5,7 @@ use syscall::error::*;
 use syscall::scheme::SchemeMut;
 
 pub struct LogHandle {
-    context: Box<[u8]>,
+    context: Box<str>,
     buf: Vec<u8>,
 }
 
@@ -24,12 +24,12 @@ impl LogScheme {
 }
 
 impl SchemeMut for LogScheme {
-    fn open(&mut self, path: &[u8], _flags: usize, _uid: u32, _gid: u32) -> Result<usize> {
+    fn open(&mut self, path: &str, _flags: usize, _uid: u32, _gid: u32) -> Result<usize> {
         let id = self.next_id;
         self.next_id += 1;
 
         self.handles.insert(id, LogHandle {
-            context: path.to_vec().into_boxed_slice(),
+            context: path.to_string().into_boxed_str(),
             buf: Vec::new()
         });
 
@@ -64,7 +64,7 @@ impl SchemeMut for LogScheme {
             if handle.buf.is_empty() {
                 let timestamp = Local::now();
                 let _ = write!(handle.buf, "{}", timestamp.format("%F %T%.f "));
-                handle.buf.extend_from_slice(&handle.context);
+                handle.buf.extend_from_slice(handle.context.as_bytes());
                 handle.buf.extend_from_slice(b": ");
             }
 
@@ -101,8 +101,9 @@ impl SchemeMut for LogScheme {
         }
 
         let mut j = 0;
-        while i < buf.len() && j < handle.context.len() {
-            buf[i] = handle.context[j];
+        let context_bytes = handle.context.as_bytes();
+        while i < buf.len() && j < context_bytes.len() {
+            buf[i] = context_bytes[j];
             i += 1;
             j += 1;
         }
