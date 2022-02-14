@@ -1,6 +1,7 @@
 use chrono::Local;
 use std::collections::BTreeMap;
-use std::io::{self, Write};
+use std::fs::File;
+use std::io::Write;
 use syscall::error::*;
 use syscall::scheme::SchemeMut;
 
@@ -11,13 +12,15 @@ pub struct LogHandle {
 
 pub struct LogScheme {
     next_id: usize,
+    files: Vec<File>,
     handles: BTreeMap<usize, LogHandle>,
 }
 
 impl LogScheme {
-    pub fn new() -> Self {
+    pub fn new(files: Vec<File>) -> Self {
         LogScheme {
             next_id: 0,
+            files,
             handles: BTreeMap::new(),
         }
     }
@@ -36,12 +39,25 @@ impl SchemeMut for LogScheme {
         Ok(id)
     }
 
-    fn dup(&mut self, _id: usize, buf: &[u8]) -> Result<usize> {
+    fn dup(&mut self, old_id: usize, buf: &[u8]) -> Result<usize> {
         if ! buf.is_empty() {
             return Err(Error::new(EINVAL));
         }
 
-        Ok(0)
+        let context = {
+            let handle = self.handles.get(&old_id).ok_or(Error::new(EBADF))?;
+            handle.context.clone()
+        };
+
+        let id = self.next_id;
+        self.next_id += 1;
+
+        self.handles.insert(id, LogHandle {
+            context,
+            buf: Vec::new()
+        });
+
+        Ok(id)
     }
 
     fn read(&mut self, id: usize, _buf: &mut [u8]) -> Result<usize> {
@@ -55,24 +71,26 @@ impl SchemeMut for LogScheme {
     fn write(&mut self, id: usize, buf: &[u8]) -> Result<usize> {
         let handle = self.handles.get_mut(&id).ok_or(Error::new(EBADF))?;
 
-        let mut stdout = io::stdout();
-
         let mut i = 0;
         while i < buf.len() {
             let b = buf[i];
 
+            /*TODO: do we want to log timestampts too?
             if handle.buf.is_empty() {
                 let timestamp = Local::now();
                 let _ = write!(handle.buf, "{}", timestamp.format("%F %T%.f "));
                 handle.buf.extend_from_slice(handle.context.as_bytes());
                 handle.buf.extend_from_slice(b": ");
             }
+            */
 
             handle.buf.push(b);
 
             if b == b'\n' {
-                let _ = stdout.write(&handle.buf);
-                let _ = stdout.flush();
+                for file in self.files.iter_mut() {
+                    let _ = file.write(&handle.buf);
+                    let _ = file.flush();
+                }
 
                 handle.buf.clear();
             }
