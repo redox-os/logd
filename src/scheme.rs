@@ -7,13 +7,14 @@ use syscall::scheme::SchemeMut;
 
 pub struct LogHandle {
     context: Box<str>,
-    buf: Vec<u8>,
+    bufs: BTreeMap<usize, Vec<u8>>,
 }
 
 pub struct LogScheme {
     next_id: usize,
     files: Vec<File>,
     handles: BTreeMap<usize, LogHandle>,
+    pub current_pid: usize,
 }
 
 impl LogScheme {
@@ -22,6 +23,7 @@ impl LogScheme {
             next_id: 0,
             files,
             handles: BTreeMap::new(),
+            current_pid: 0,
         }
     }
 }
@@ -33,7 +35,7 @@ impl SchemeMut for LogScheme {
 
         self.handles.insert(id, LogHandle {
             context: path.to_string().into_boxed_str(),
-            buf: Vec::new()
+            bufs: BTreeMap::new(),
         });
 
         Ok(id)
@@ -54,7 +56,7 @@ impl SchemeMut for LogScheme {
 
         self.handles.insert(id, LogHandle {
             context,
-            buf: Vec::new()
+            bufs: BTreeMap::new(),
         });
 
         Ok(id)
@@ -71,28 +73,30 @@ impl SchemeMut for LogScheme {
     fn write(&mut self, id: usize, buf: &[u8]) -> Result<usize> {
         let handle = self.handles.get_mut(&id).ok_or(Error::new(EBADF))?;
 
+        let handle_buf = handle.bufs.entry(self.current_pid).or_insert_with(|| Vec::new());
+
         let mut i = 0;
         while i < buf.len() {
             let b = buf[i];
 
             /*TODO: do we want to log timestampts too?
-            if handle.buf.is_empty() {
+            if handle_buf.is_empty() {
                 let timestamp = Local::now();
-                let _ = write!(handle.buf, "{}", timestamp.format("%F %T%.f "));
-                handle.buf.extend_from_slice(handle.context.as_bytes());
-                handle.buf.extend_from_slice(b": ");
+                let _ = write!(handle_buf, "{}", timestamp.format("%F %T%.f "));
+                handle_buf.extend_from_slice(handle.context.as_bytes());
+                handle_buf.extend_from_slice(b": ");
             }
             */
 
-            handle.buf.push(b);
+            handle_buf.push(b);
 
             if b == b'\n' {
                 for file in self.files.iter_mut() {
-                    let _ = file.write(&handle.buf);
+                    let _ = file.write(&handle_buf);
                     let _ = file.flush();
                 }
 
-                handle.buf.clear();
+                handle_buf.clear();
             }
 
             i += 1;
@@ -132,11 +136,15 @@ impl SchemeMut for LogScheme {
     fn fsync(&mut self, id: usize) -> Result<usize> {
         let _handle = self.handles.get(&id).ok_or(Error::new(EBADF))?;
 
+        //TODO: flush remaining data?
+
         Ok(0)
     }
 
     fn close(&mut self, id: usize) -> Result<usize> {
         self.handles.remove(&id).ok_or(Error::new(EBADF))?;
+        
+        //TODO: flush remaining data?
 
         Ok(0)
     }

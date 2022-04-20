@@ -39,6 +39,7 @@ fn daemon(mut write: File) {
             break;
         }
 
+        scheme.current_pid = packet.pid;
         scheme.handle(&mut packet);
 
         socket.write(&packet).expect("logd: failed to write responses to log scheme");
