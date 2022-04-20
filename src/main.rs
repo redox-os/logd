@@ -1,4 +1,3 @@
-extern crate chrono;
 extern crate syscall;
 
 use syscall::data::Packet;

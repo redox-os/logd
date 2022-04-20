@@ -1,4 +1,3 @@
-use chrono::Local;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
@@ -79,14 +78,10 @@ impl SchemeMut for LogScheme {
         while i < buf.len() {
             let b = buf[i];
 
-            /*TODO: do we want to log timestampts too?
-            if handle_buf.is_empty() {
-                let timestamp = Local::now();
-                let _ = write!(handle_buf, "{}", timestamp.format("%F %T%.f "));
+            if handle_buf.is_empty() && ! handle.context.is_empty() {
                 handle_buf.extend_from_slice(handle.context.as_bytes());
                 handle_buf.extend_from_slice(b": ");
             }
-            */
 
             handle_buf.push(b);
 
@@ -143,7 +138,7 @@ impl SchemeMut for LogScheme {
 
     fn close(&mut self, id: usize) -> Result<usize> {
         self.handles.remove(&id).ok_or(Error::new(EBADF))?;
-        
+
         //TODO: flush remaining data?
 
         Ok(0)
