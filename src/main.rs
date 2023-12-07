@@ -1,12 +1,10 @@
-extern crate syscall;
-
-use syscall::data::Packet;
-use syscall::scheme::SchemeMut;
 use std::env;
-use std::fs::{File, OpenOptions};
+use std::fs::{OpenOptions};
 use std::io::{Read, Write};
 use std::process;
-use scheme::LogScheme;
+use redox_scheme::{Socket, SignalBehavior};
+
+use crate::scheme::LogScheme;
 
 mod scheme;
 
@@ -20,9 +18,9 @@ fn daemon(daemon: redox_daemon::Daemon) -> ! {
         }
     }
 
-    let mut socket = File::create(":log").expect("logd: failed to create log scheme");
+    let mut socket = Socket::create("log").expect("logd: failed to create log scheme");
 
-    syscall::setrens(0, 0).expect("logd: failed to enter null namespace");
+    libredox::call::setrens(0, 0).expect("logd: failed to enter null namespace");
 
     eprintln!("logd: ready for logging on log:");
 
@@ -30,16 +28,12 @@ fn daemon(daemon: redox_daemon::Daemon) -> ! {
 
     let mut scheme = LogScheme::new(files);
 
-    loop {
-        let mut packet = Packet::default();
-        if socket.read(&mut packet).expect("logd: failed to read events from log scheme") == 0 {
-            break;
-        }
+    while let Some(request) = socket.next_request(SignalBehavior::Restart).expect("logd: failed to read events from log scheme") {
+        scheme.current_pid = request.context_id();
 
-        scheme.current_pid = packet.pid;
-        scheme.handle(&mut packet);
+        let response = request.handle_scheme_mut(&mut scheme);
 
-        socket.write(&packet).expect("logd: failed to write responses to log scheme");
+        socket.write_responses(&[response], SignalBehavior::Restart).expect("logd: failed to write responses to log scheme");
     }
     process::exit(0);
 }

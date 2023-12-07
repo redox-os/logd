@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
+
 use syscall::error::*;
-use syscall::scheme::SchemeMut;
+use redox_scheme::SchemeMut;
 
 pub struct LogHandle {
     context: Box<str>,
