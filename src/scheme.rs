@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
 
-use syscall::error::*;
 use redox_scheme::SchemeMut;
+use syscall::error::*;
 
 pub struct LogHandle {
     context: Box<str>,
@@ -33,16 +33,19 @@ impl SchemeMut for LogScheme {
         let id = self.next_id;
         self.next_id += 1;
 
-        self.handles.insert(id, LogHandle {
-            context: path.to_string().into_boxed_str(),
-            bufs: BTreeMap::new(),
-        });
+        self.handles.insert(
+            id,
+            LogHandle {
+                context: path.to_string().into_boxed_str(),
+                bufs: BTreeMap::new(),
+            },
+        );
 
         Ok(id)
     }
 
     fn dup(&mut self, old_id: usize, buf: &[u8]) -> Result<usize> {
-        if ! buf.is_empty() {
+        if !buf.is_empty() {
             return Err(Error::new(EINVAL));
         }
 
@@ -54,15 +57,18 @@ impl SchemeMut for LogScheme {
         let id = self.next_id;
         self.next_id += 1;
 
-        self.handles.insert(id, LogHandle {
-            context,
-            bufs: BTreeMap::new(),
-        });
+        self.handles.insert(
+            id,
+            LogHandle {
+                context,
+                bufs: BTreeMap::new(),
+            },
+        );
 
         Ok(id)
     }
 
-    fn read(&mut self, id: usize, _buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, id: usize, _buf: &mut [u8], _offset: u64, _flags: u32) -> Result<usize> {
         let _handle = self.handles.get(&id).ok_or(Error::new(EBADF))?;
 
         // TODO
@@ -70,16 +76,19 @@ impl SchemeMut for LogScheme {
         Ok(0)
     }
 
-    fn write(&mut self, id: usize, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, id: usize, buf: &[u8], _offset: u64, _flags: u32) -> Result<usize> {
         let handle = self.handles.get_mut(&id).ok_or(Error::new(EBADF))?;
 
-        let handle_buf = handle.bufs.entry(self.current_pid).or_insert_with(|| Vec::new());
+        let handle_buf = handle
+            .bufs
+            .entry(self.current_pid)
+            .or_insert_with(|| Vec::new());
 
         let mut i = 0;
         while i < buf.len() {
             let b = buf[i];
 
-            if handle_buf.is_empty() && ! handle.context.is_empty() {
+            if handle_buf.is_empty() && !handle.context.is_empty() {
                 handle_buf.extend_from_slice(handle.context.as_bytes());
                 handle_buf.extend_from_slice(b": ");
             }
